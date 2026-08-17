@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>5 Person Race Timer</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f4f4f4;color:#111}
+.wrap{max-width:520px;margin:auto;padding:16px}
+h1{font-size:24px;margin:6px 0 14px}
+.card{background:white;border-radius:14px;padding:14px;margin:10px 0;box-shadow:0 2px 8px #0001}
+button{width:100%;padding:14px;border:0;border-radius:10px;font-size:18px;font-weight:bold;margin:6px 0}
+.start{background:#1b8f3a;color:white}.finish{background:#c62828;color:white}
+.secondary{background:#ddd}.danger{background:#222;color:white}
+#reader{width:100%;max-width:480px;margin:auto}
+.status{padding:10px;border-radius:9px;background:#eee;margin:8px 0;font-weight:bold}
+table{width:100%;border-collapse:collapse}th,td{padding:9px 5px;border-bottom:1px solid #ddd;text-align:left}
+.small{font-size:13px;color:#555}
+.hidden{display:none}
+</style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+<h1>🏁 5-Deelnemer Race Timer</h1>
+<div class="card">
+<div class="status" id="mode">Kies START of FINISH</div>
+<button class="start" onclick="setMode('start')">🟢 BEGIN SCAN</button>
+<button class="finish" onclick="setMode('finish')">🔴 EINDE SCAN</button>
+<div id="reader"></div>
+<div class="small">Scan die QR-kode van deelnemer 001–005. Die foon stoor die tye op hierdie toestel.</div>
+</div>
+<div class="card">
+<h3>Resultate</h3>
+<table><thead><tr><th>#</th><th>Begin</th><th>Einde</th><th>Tyd</th></tr></thead>
+<tbody id="results"></tbody></table>
+<button class="secondary" onclick="exportCSV()">Laai resultate (CSV)</button>
+<button class="danger" onclick="resetAll()">Maak alles skoon</button>
+</div>
+</div>
+<script>
+let mode=null, scanner=null;
+const KEY='race5_v1';
+let data=JSON.parse(localStorage.getItem(KEY)||'{}');
+for(let i=1;i<=5;i++) if(!data[i]) data[i]={start:null,finish:null};
+
+function save(){localStorage.setItem(KEY,JSON.stringify(data)); render();}
+function setMode(m){
+ mode=m;
+ document.getElementById('mode').textContent=m==='start'?'🟢 SCAN BEGIN — scan nou die deelnemer se QR-kode':'🔴 SCAN EINDE — scan nou die deelnemer se QR-kode';
+ if(scanner){scanner.stop().catch(()=>{});scanner.clear();}
+ scanner=new Html5Qrcode("reader");
+ scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:240,height:240}},
+  txt=>handleScan(txt.trim()),()=>{}).catch(e=>{
+   document.getElementById('mode').textContent='Kamera kon nie begin nie. Gebruik Chrome en gee Camera permission.';
+ });
+}
+function handleScan(txt){
+ let m=txt.match(/^(?:P)?0*([1-5])$/i);
+ if(!m){alert('Onbekende QR-kode. Gebruik P001 tot P005.');return;}
+ let n=String(Number(m[1])), now=Date.now();
+ if(mode==='start'){
+   if(data[n].start){ if(!confirm('Deelnemer '+n+' het reeds begin. Oorskryf?')) return; }
+   data[n].start=now; data[n].finish=null;
+ } else if(mode==='finish'){
+   if(!data[n].start){alert('Deelnemer '+n+' het nog nie begin nie.');return;}
+   if(data[n].finish){if(!confirm('Deelnemer '+n+' het reeds geëindig. Oorskryf?')) return;}
+   data[n].finish=now;
+ }
+ save();
+ navigator.vibrate?.(180);
+}
+function fmt(t){return t?new Date(t).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}
+function duration(a,b){
+ if(!a||!b)return '—'; let s=Math.floor((b-a)/1000),h=Math.floor(s/3600);s%=3600;
+ let m=Math.floor(s/60);s%=60;
+ return (h?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function render(){
+ document.getElementById('results').innerHTML=[1,2,3,4,5].map(i=>{
+  let d=data[i];return `<tr><td>P00${i}</td><td>${fmt(d.start)}</td><td>${fmt(d.finish)}</td><td><b>${duration(d.start,d.finish)}</b></td></tr>`;
+ }).join('');
+}
+function exportCSV(){
+ let rows=[['Participant','Start','Finish','Time']];
+ for(let i=1;i<=5;i++){let d=data[i];rows.push([`P00${i}`,fmt(d.start),fmt(d.finish),duration(d.start,d.finish)]);}
+ let csv=rows.map(r=>r.join(',')).join('\\n'), blob=new Blob([csv],{type:'text/csv'});
+ let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='race-results.csv';a.click();
+}
+function resetAll(){if(confirm('Maak ALLE 5 deelnemers se tye skoon?')){for(let i=1;i<=5;i++)data[i]={start:null,finish:null};save();}}
+render();
+</script>
+</body>
+</html>
